@@ -611,6 +611,7 @@ def readBinHead(binfilename,binType):
       if k in layerList:
         if not strPerList or kper in strPerList:
           numPy2Ras(read_data, rastername)
+          rastername = arcpy.sa.Times(rastername,1000)
           clipRaster(rastername)
         elif kper > maxStrPer:
           endOfTime = True
@@ -686,12 +687,12 @@ def readBinCBC(binfilename,rasType):
   #
   #  Flow Vectors require Special processing to produce ArcGIS
   #  features (points) which can be symbolized as arrows in ArcMap
+  #
   #	Arrow Symbology should be rotated 180 to account for
   #	Modflow sign conventions of flow budget terms.
   #
   #	IE: negative FLOW_RIGHT_FACE is actually flow into the eastern Face
   #	If you see negative FLOW_LOWER_FACE you have fertical flow going up.
-  #
   #  The optional Resampling argument also produces features representing
   #  an aggregation of X cells by X cells.
   #
