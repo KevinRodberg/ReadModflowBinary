@@ -562,6 +562,11 @@ def readBinHead(binfilename,binType):
   read_data=[]
   nlays,nrows,ncols,npers,cellsz1,cellsz2=modelDisc()
   
+  ws1 = optArgs['geodb']
+  ws2 = optArgs['clpgdb']
+  defClip=modelClips[optArgs['model']]
+
+  
   Hdr=binHdr[binType]
   knt= int(nrows)*int(ncols)
   shape = (nrows,ncols)
@@ -594,24 +599,29 @@ def readBinHead(binfilename,binType):
     MFhdr  = []
     MFhdr  = np.fromfile(binfile,Hdr,count=1,sep='')
     if not MFhdr:
+        print(binfilename)
         exit(99)
     print (MFhdr)    
     kper   = MFhdr['KPER'][0]
     totim  = MFhdr['TOTIM'][0] 
     k      = MFhdr['K'][0]
-    if binType == 'CONC':
-        kper = int(totim)
     read_data = np.fromfile(file=binfile, dtype=np.float32,
                 count=knt, sep='').reshape(shape)
+    if binType == 'CONC':
+        kper = int(totim)
+        read_data = read_data * 1000.0
 #    print ("Min {}, max {}".format(np.amin(read_data), np.amax(read_data)))
-    
+
     rastername = binType + '{:7.5f}'.format(((kper)/100000.0))+"_"+str(k)
     rastername = rastername.replace("0.","_")
+    rastername = os.path.join(ws1,rastername)
+    oneKConstant = 1000.0
     if layerList != [0] or strPerList != [0]:
       if k in layerList:
         if not strPerList or kper in strPerList:
           numPy2Ras(read_data, rastername)
-          rastername = arcpy.sa.Times(rastername,1000)
+          print(rastername)
+
           clipRaster(rastername)
         elif kper > maxStrPer:
           endOfTime = True
@@ -1546,7 +1556,7 @@ if __name__ == '__main__':
       ocFilename_full = os.path.join(path, ocFilename)
       print ("Output Control filename: {}".format(ocFilename))
 
-      if (optArgs['model'] in ['C4CDC','NPALM']):
+      if (optArgs['model'] in ['C4CDC','NPALM','ECFTX']):
         HeadsUnit = getUnitNum(ocFilename_full,1,3)
       else:
         HeadsUnit = getUnitNum(ocFilename_full,1,0)
