@@ -522,9 +522,9 @@ def clipRaster(InRastername):
       arcpy.env.workspace = r'IN_MEMORY'
     else:
       arcpy.env.workspace = ws2
-    print ("Input Workspace: {}".format(ws1))
-    print ("Current Workspace: {}".format(arcpy.env.workspace))
-    print ("Input Raster path : {}".format(path))
+#    print ("Input Workspace: {}".format(ws1))
+#    print ("Current Workspace: {}".format(arcpy.env.workspace))
+#    print ("Input Raster path : {}".format(path))
     print ("Input Raster: {}".format(ras))
     InRasFullame = os.path.join(ws1,ras)
     print ("Input Raster: {}".format(InRasFullame))
