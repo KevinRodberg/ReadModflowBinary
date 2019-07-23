@@ -659,9 +659,9 @@ def readCBCterms():
     MFhdr1 = []
     MFhdr2 = []
     MFhdr1 = np.fromfile(binfile,cbcHdr,count=1,sep='')
-#    print ("CDC Header>> {}".format(MFhdr1))
+    print ("CDC Header>> {}".format(MFhdr1))
     if MFhdr1.size < 1:
-#      print ("End of File Encountered")
+      print ("End of File Encountered")
       return(termlist)
     if firstPer == 0:
       firstPer = int(MFhdr1["KPER"][0])
@@ -702,7 +702,7 @@ def readBinCBC(binfilename,rasType):
   #	Modflow sign conventions of flow budget terms.
   #
   #	IE: negative FLOW_RIGHT_FACE is actually flow into the eastern Face
-  #	If you see negative FLOW_LOWER_FACE you have fertical flow going up.
+  #	If you see negative FLOW_LOWER_FACE you have vertical flow going up.
   #  The optional Resampling argument also produces features representing
   #  an aggregation of X cells by X cells.
   #
@@ -843,7 +843,11 @@ def readBinCBC(binfilename,rasType):
   cbcUFHdr=binHdr['CBCUF']
   xcbcHdr=binHdr['XCBC']
 
-  layerList = parseRange(layerRange)
+  if layerRange:
+    layerList = parseRange(layerRange)
+  else:
+    layerList = parseRange('1-'+str(nlays))
+    
   strPerList = parseRange(strPerRange)
   if strPerList:
     maxStrPer =  max(strPerList)
@@ -853,6 +857,9 @@ def readBinCBC(binfilename,rasType):
   print ("Binary Filename: {}".format(binfilename))
   binfile=open(binfilename,'rb')
   endOfTime = False
+  
+##    for strPerByLay in xrange(int(npers*nlays)):
+
   for i in xrange(npers*15*5):
     #Check root to see if process should be terminated
     if not cmdLine:
@@ -871,11 +878,11 @@ def readBinCBC(binfilename,rasType):
     else:
       MFhdr1 = np.fromfile(binfile,cbcUFHdr,
                            count=1,sep='')
-      
+##    print(MFhdr1)  
     if MFhdr1.size < 1:
       print ("End of File Encountered")
       return
-    sys.stdout.write('.')
+##    sys.stdout.write('.')
     print (MFhdr1["KSTP"][0],MFhdr1["KPER"][0],MFhdr1["TEXT"][0])
     
     kstp = int(MFhdr1["KSTP"][0])
@@ -915,6 +922,12 @@ def readBinCBC(binfilename,rasType):
           bor = np.fromfile(binfile,np.int32, count=1)
         read_data=np.fromfile(binfile,np.float32,reclen3d).reshape(shp3d)
         for ilayer in range(nlays):
+          #Check root to see if process should be terminated
+          if not cmdLine:
+              root.update()
+              if  not running:
+                root.destroy()
+                exit(7)
           slice = read_data[ilayer,:,:].reshape(shape)
 #          rastername = budget + "_" + str(ilayer+1) + "_" + \
 #                 '{:7.5f}'.format(((iper)/100000.0))
@@ -1539,7 +1552,7 @@ if __name__ == '__main__':
       root.title("Click Button to Terminate App")
       root.geometry("250x40")
       app = Frame(root)
-      message=Label(app,text="Terminate Button is not Immediate")
+      message=Label(app,text="Termination will follow export of current Raster")
       message.pack()
       stop = Button(app, text="Terminate", bg="yellow",command=stopFn)
       stop.place(relx=.5,rely=.5,anchor=CENTER)
