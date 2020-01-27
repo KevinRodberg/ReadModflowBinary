@@ -37,6 +37,11 @@ def getSpatialA():
   return
 
 def setWorkspc(geodb):
+  try:
+        import arcpy
+
+  except ImportError:
+        print('ESRI arcpy library not imported')
 #
 #   Set base paths for ESRI workspace. 
 #
@@ -60,20 +65,22 @@ def setWorkspc(geodb):
   workspace = os.path.join(outputPath, gdbfile)
   print ("Workspace has been defined as: {}".format(workspace))
   print ("does workspace exist:")
-  
-  if not arcpy.Exists(workspace):
-    print ("Workspace does not exist.  Creating New one!")
-    (temp_path, gdbfile) = os.path.split(workspace)
-    if temp_path == "":
-      temp_path = outputPath
-    print (temp_path)
-    print (gdbfile)
-    arcpy.CreateFileGDB_management(temp_path, gdbfile)
-    arcpy.env.workspace = os.path.join(temp_path, gdbfile)
-  else:
-    arcpy.env.workspace = workspace
-  print ("output will be written to: {}".format(workspace))
-  arcpy.env.overwriteOutput = True
+  try:
+      if not arcpy.Exists(workspace):
+        print ("Workspace does not exist.  Creating New one!")
+        (temp_path, gdbfile) = os.path.split(workspace)
+        if temp_path == "":
+          temp_path = outputPath
+        print (temp_path)
+        print (gdbfile)
+        arcpy.CreateFileGDB_management(temp_path, gdbfile)
+        arcpy.env.workspace = os.path.join(temp_path, gdbfile)
+      else:
+        arcpy.env.workspace = workspace
+      print ("output will be written to: {}".format(workspace))
+      arcpy.env.overwriteOutput = True
+  except ImportError:
+      print('Should not call [setWorkspc] when not using Citrix')
   return workspace
 
 def clearINMEM():
@@ -131,6 +138,10 @@ def modelClips(model):
    return(modelClips[model])
 
 def modelOrigins(model):
+#
+#  Get origin coordinates by model name
+#  (xmin, ymin)    
+#     
     modelOrigs= {
     'C4CDC' :(763329.000, 437766.000),
     'ECFM'  :(565465.000, -44448.000),
@@ -145,12 +156,18 @@ def modelOrigins(model):
     'WCFM'  :( 20665.000, -44448.000)}
     return(modelOrigs[model])
  
-def CreateGeoTiff(NewFileName, Array, driver, ncols,nrows, xsize, ysize, 
-                  xcoord, ycoord,SR):
+def CreateGeoTiff(NewFileName, Array, xsize, ysize,xcoord, ycoord,SR):
+#  No ArcPy  -- uses just GDAL
+#  Create a georeferenced raster (TIF) from an array of values
+#  with defined pixel resolution and a spatial coordinate for 
+#  the upper left corner as the raster origin    
+#         
+    import numpy as np
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(SR)
     driver = gdal.GetDriverByName( 'GTiff' )
     DataType = gdal.GDT_Float32
+    (nrows,ncols) = np.shape(Array)
     DataSet = driver.Create( NewFileName, ncols, nrows, 1, DataType )
     geotransform=(xcoord,xsize,0,ycoord,0,-ysize)  
     DataSet.SetGeoTransform(geotransform) 
@@ -160,6 +177,10 @@ def CreateGeoTiff(NewFileName, Array, driver, ncols,nrows, xsize, ysize,
     return NewFileName
 
 def pixelOffset2coord(raster, xOffset,yOffset):
+#  No ArcPy  -- uses just GDAL
+# Calculates the coordinate of a pixel center 
+# from an offset calculate4d from half the pixel resolution
+#
     geotransform = raster.GetGeoTransform()
     originX = geotransform[0]
     originY = geotransform[3]
@@ -170,17 +191,27 @@ def pixelOffset2coord(raster, xOffset,yOffset):
     return coordX, coordY
 
 def rasFile2array(rasterFile):
+#  No ArcPy  -- uses just GDAL
+#  Return an array read from a single, specified  band of a raster file
+#    
     raster = gdal.Open(rasterFile)
     band = raster.GetRasterBand(1)
     array = band.ReadAsArray()
     return array
 
 def raster2array(raster):
+#  No ArcPy  -- uses just GDAL
+#  Return an array read from a single, specified band of a raster 
+#    
     band = raster.GetRasterBand(1)
     array = band.ReadAsArray()
     return array
 
 def array2shp(array,outFeature,rasterFile,arrName="VALUE",espg=2881):
+#  No ArcPy  -- uses just GDAL
+#  Create and save an ESRI point shapefile at pixel center coordinates
+#  with values from array of the same dimensions as the raster
+#    
     raster = gdal.Open(rasterFile)
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(espg)
@@ -207,6 +238,10 @@ def array2shp(array,outFeature,rasterFile,arrName="VALUE",espg=2881):
     
 def Two_array2shp(array1,array2,outFeature,rasterFile,
                   arrName1="DIR",arrName2="MAG",csizeMultiplier=1,espg=2881):
+#  No ArcPy  -- uses just GDAL
+#  Create and save an ESRI point shapefile at pixel center coordinates
+#  with values from 2 arrays of the same dimensions as the raster
+#      
     raster = gdal.Open(rasterFile)
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(espg)
@@ -215,11 +250,9 @@ def Two_array2shp(array1,array2,outFeature,rasterFile,
         shpDriver.DeleteDataSource(outFeature)
     outDataSource = shpDriver.CreateDataSource(outFeature)
     outLayer = outDataSource.CreateLayer(outFeature,srs,geom_type=ogr.wkbPoint)
-
     featureDefn = outLayer.GetLayerDefn()
     outLayer.CreateField(ogr.FieldDefn(arrName1, ogr.OFTInteger))
     outLayer.CreateField(ogr.FieldDefn(arrName2, ogr.OFTReal))
-
     point = ogr.Geometry(ogr.wkbPoint)
     for ridx, (rowa, rowb) in enumerate(zip(array1,array2)):
         for cidx, (value1,value2) in enumerate(zip(rowa,rowb)):
@@ -228,7 +261,7 @@ def Two_array2shp(array1,array2,outFeature,rasterFile,
             outFeature = ogr.Feature(featureDefn)
             outFeature.SetGeometry(point)
             outFeature.SetField(arrName1, int(value1))
-#  Resampled Rasters need to magnitude multiplied by resample multiplier**2]            
+#  Resampled Rasters need magnitude multiplied by resample multiplier**2]            
             outFeature.SetField(arrName2, float(value2)*(csizeMultiplier**2))
             outLayer.CreateFeature(outFeature)
             outFeature.Destroy()   
@@ -237,39 +270,21 @@ def Two_array2shp(array1,array2,outFeature,rasterFile,
 def TwoRas2OnePnt(dirRas,magRas,outFeature,optArgs,
                   arrName1="DIR",arrName2="MAG",
                   csizeMultiplier=1):
+#  uses either gdal or arcpy
+#  Create and save an ESRI point shapefile at pixel center coordinates
+#  with values from array of the same dimensions
+#      
     espg = getModel_SR(optArgs['model'])
+    # Using GDAL
     if optArgs['noArc'] :
         dirRas = dirRas+'.tif'
         magRas = magRas+'.tif'
         outFeature = outFeature + '.shp'
         array1 = rasFile2array(dirRas)
         array2 = rasFile2array(magRas)
-        raster = gdal.Open(dirRas)
-        srs = osr.SpatialReference()
-        srs.ImportFromEPSG(espg)
-        shpDriver = ogr.GetDriverByName("ESRI Shapefile")
-        if os.path.exists(outFeature):
-            shpDriver.DeleteDataSource(outFeature)
-        outDataSource = shpDriver.CreateDataSource(outFeature)
-        outLayer = outDataSource.CreateLayer(outFeature,srs,geom_type=ogr.wkbPoint)
-    
-        featureDefn = outLayer.GetLayerDefn()
-        outLayer.CreateField(ogr.FieldDefn(arrName1, ogr.OFTInteger))
-        outLayer.CreateField(ogr.FieldDefn(arrName2, ogr.OFTReal))
-    
-        point = ogr.Geometry(ogr.wkbPoint)
-        for ridx, (rowa, rowb) in enumerate(zip(array1,array2)):
-            for cidx, (value1,value2) in enumerate(zip(rowa,rowb)):
-                Xcoord, Ycoord = pixelOffset2coord(raster,cidx,ridx)
-                point.AddPoint(Xcoord, Ycoord)
-                outFeature = ogr.Feature(featureDefn)
-                outFeature.SetGeometry(point)
-                outFeature.SetField(arrName1, int(value1))
-    #  Resampled Rasters need to magnitude multiplied by resample multiplier**2]            
-                outFeature.SetField(arrName2, float(value2)*(csizeMultiplier**2))
-                outLayer.CreateFeature(outFeature)
-                outFeature.Destroy()   
-        outDataSource = None 
+        Two_array2shp(array1,array2,outFeature,dirRas,"DIR","MAG",
+                      csizeMultiplier,espg)
+    # Using ArcPy        
     else:
         if 'clp' in dirRas:
           fgdb = optArgs['clpgdb']
@@ -277,22 +292,23 @@ def TwoRas2OnePnt(dirRas,magRas,outFeature,optArgs,
           fgdb = optArgs['geodb'] 
         arcpy.env.workspace = fgdb
         arcpy.RasterToPoint_conversion(in_raster=dirRas,out_point_features=outFeature,
-                              raster_field="VALUE")
-        #rasFldMap = os.path.join(fgdb,os.path.basename(magRas)+' Magnitude')
-        rasFldMap = magRas+' Magnitude'
+                              raster_field=arrName1)
+        rasFldMap = magRas + ' ' + arrName2
         arcpy.gp.ExtractMultiValuesToPoints_sa(outFeature,rasFldMap,"NONE")
         if csizeMultiplier != 1:
-            express = "!Magnitude! * "+str(csizeMultiplier)+ " * "+str(csizeMultiplier)
-            arcpy.CalculateField_management(in_table=outFeature,field="Magnitude",
+            express = "!Magnitude! * "+ str(csizeMultiplier)\
+                                      + " * "+str(csizeMultiplier)
+            arcpy.CalculateField_management(in_table=outFeature,field=arrName2,
                                             expression=express,
                                             expression_type="PYTHON_9.3", 
                                             code_block="#")
         arcpy.env.workspace = optArgs['geodb']  
     
 def raster_X_coeff(file, file2, coeff, band=1):
-#
+#   No ArcPy  -- uses just GDAL
 #   Given raster file and band number, 
 #   multiplies it by coeff and saves resultant raster as file2
+#       If file1 == file2 original raster is overwritten    
 #
     driver = gdal.GetDriverByName('GTiff')
     RaserDataSet = gdal.Open(file)
@@ -324,7 +340,6 @@ def numPy2Ras(npArray, rasName, optArgs, discDict):
   resx = float(discDict['cellsize1'])
   resy = float(discDict['cellsize2'])
   nrows = int(discDict['nrows'])
-  ncols = int(discDict['ncols'])
   llorigin = modelOrigins(optArgs['model'])
   ulx = llorigin[0]
   uly = llorigin[1]+(nrows*resy)
@@ -341,27 +356,23 @@ def numPy2Ras(npArray, rasName, optArgs, discDict):
          rasFilename = rasName
       elif 'clp' in rasName:
          rasFilename = os.path.join(optArgs['clpgdb'], rasName)
-         print ("{} \t:ArcGIS Clipped Raster".format(rasName))
+         print ("{} \t:Clipped Raster".format(rasName))
       else:
          rasFilename = os.path.join(optArgs['geodb'], rasName)
-         print ("{} \t\t:ArcGIS Raster".format(noPath(rasName)))
+         print ("{} \t\t:Raster".format(noPath(rasName)))
       ras.save(rasFilename)
       arcpy.DefineProjection_management(ras, SR)
   else:
+  # Using GDAL
     if optArgs['rasFolder'] != None:
          outputPath, rasFile = os.path.split(rasName)
-         if outputPath == '':
-             outputPath =  optArgs['rasFolder']
+         if outputPath == '': outputPath =  optArgs['rasFolder']
          if not os.path.exists(outputPath): os.makedirs(outputPath)
          suffix = '.tif'
          rasFilename = os.path.join(optArgs['rasFolder'],rasFile+suffix)
-         if 'clp' in rasName:
-           print ("{} \t:GDAL Clipped Raster".format(rasFile))
-         else:
-           print ("{} \t\t:GDAL Raster".format(rasFile))
-         driver = gdal.GetDriverByName('GTiff')
-         CreateGeoTiff(rasFilename,npArray,driver,ncols,nrows,
-                       resx,resy,ulx,uly,
+         if 'clp' in rasName: print ("{} \t:Clipped Raster".format(rasFile))
+         else: print ("{} \t\t:Raster".format(rasFile))
+         CreateGeoTiff(rasFilename,npArray,resx,resy,ulx,uly,
                        getModel_SR(optArgs['model']))
     else:
         print("rasFolder' option has been set to 'None' somehow!" )
@@ -398,7 +409,7 @@ def clipRaster(InRastername, optArgs):
           arcpy.env.workspace = ws2
         InRasFullame = os.path.join(ws1,ras)
         arcpy.gp.ExtractByRectangle_sa(InRasFullame,clip,clpRaster,"INSIDE")
-        print ("{} \t:ArcGIS Clipped Raster".format(clpRaster))
+        print ("{} \t:Clipped Raster".format(clpRaster))
         arcpy.env.workspace = ws1
      else:
         ws1 = optArgs['rasFolder']
@@ -414,6 +425,6 @@ def clipRaster(InRastername, optArgs):
             print("Failed to translate ",InRasFullame, "to \n", 
                   os.path.join(ws1,clpRaster+'.tif'))
         else:
-            print ("{} \t:GDAL Clipped Raster".format(clpRaster))
+            print ("{} \t:Clipped Raster".format(clpRaster))
         ds = None
   return

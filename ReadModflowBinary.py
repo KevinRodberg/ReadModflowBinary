@@ -72,6 +72,23 @@ import re
 import argparse
 import textwrap
 
+#
+#   Look into parallel processing binary data to rasters and provide final step (non-prarllel) as ArcPy conversion to geodatabase
+#
+# ##=========================
+# ##Raster To Geodatabase
+# ##Usage: RasterToGeodatabase_conversion Input_Rasters;Input_Rasters... Output_Geodatabase {Configuration_Keyword}
+# try:
+    # import arcpy
+    # arcpy.env.workspace = r"\\MyMachine\PrjWorkspace\RasGP"
+    # ##Convert Multiple Raster Dataset to FGDB
+    # arcpy.RasterToGeodatabase_conversion("ToGDB.mdb\\test;test.tif","ToGDB.gdb","MAX_FILE_SIZE_4GB")
+    # ##Load Raster Catalog
+    # arcpy.RasterToGeodatabase_conversion("test.tif;test2.tif;test3.tif","ToGDB.gdb\\catalog")
+# except:
+    # print "Raster To Geodatabase exsample failed."
+    # print arcpy.GetMessages()
+
 def setDefaultArgs():
 #
 #   Define dictionary of arguments to use in ArgumentParser
@@ -804,11 +821,16 @@ def readBinCBC(binfilename,rasType):
         if modelClips[optArgs['model']] != (0,0,0,0):
           arcpy.env.workspace = optArgs['clpgdb']
           (currPath, baseFile) = os.path.split(rasterdir)
-          rastDirclp = os.path.join(currPath,"clp"+baseFile)
+          rastDirclp = os.path.join(optArgs['clpgdb'],
+                                         "clp"+baseFile)
           arrowFeatureclp = os.path.join(optArgs['clpgdb'],
                                          "clp"+baseFile+"arw")
           msg = "Clipped Points for Flow Arrows"
           print("{}: {}".format(msg,os.path.basename(arrowFeatureclp)))
+          print("workspace",optArgs['clpgdb'])
+          print("baseFile",baseFile)
+          print("currPath",currPath)
+          print("rastDIRclp",rastDirclp)
           arcpy.RasterToPoint_conversion(in_raster=rastDirclp,
                           out_point_features=arrowFeatureclp,
                           raster_field="VALUE")

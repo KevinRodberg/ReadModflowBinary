@@ -9,20 +9,23 @@
 def setDefaultArgs():
   model_choices =['C4CDC','ECFM','ECFT','ECFTX','LECSR','NPALM','LKBGWM','LWCFAS','LWCSAS','LWCSIM','WCFM']
     
-
+  function_choices=['min','max','mean']
 #
 #   Define dictionary of arguments to use in ArgumentParser
 #    
   resampleHelp="""\
-    Resampling appropriately aggregates values from model results
-      -Heads are averaged
+    Resampling only aggregates horizontal flow vector results
       -Flow Magnitudes are summed
       -Flow Direction is averaged
       --------------------------
       -res 5 Aggregates 5x5 grid
       -res 1 Default or no resampling:[1x1]
       """
-  
+  aggregateHelp="""\
+    Aggregate multiple rasters into a single raster
+     usings one of the predefined functions
+     {0} """.format( function_choices)
+      
   modelHelp="""\
     Model defines Spatial Reference
     and Raster Lower Left Origin
@@ -56,6 +59,8 @@ def setDefaultArgs():
     ['option',"Process CellxCell budgets",'cbc'],
     'noArcGIS':
     ['option',"Process binary files without using ArcGIS",'noArc'],
+    'quiet':
+    ['option',"Reduce output to console",'quiet'],
     'gui':
     ['option',"GUI for options & arguments",'gui'],
     'hds':
@@ -63,7 +68,9 @@ def setDefaultArgs():
     'swi':
     ['option',"Process SWI Zetas file.",'zeta'],
     'res':
-       ['getArg',resampleHelp,'resample','1'],
+    ['getArg',resampleHelp,'resample','1'],
+    'agg':
+    ['getArg',aggregateHelp,'aggregate',None,function_choices],
     'tds':
     ['option',"Process TDS from MT3D file.",'conc'],
     'uzf':
@@ -101,7 +108,7 @@ def getArgsFromParser():
 #
 #   Loop through argHelp dictionary to add arguments to ArgumentParser
 #
-  parser = argparse.ArgumentParser(prog='ReadModflowBinary',
+  parser = argparse.ArgumentParser(usage=argparse.SUPPRESS,prog='ReadModflowBinary',
           formatter_class=argparse.RawTextHelpFormatter)
 
   argHelp=setDefaultArgs()
@@ -137,8 +144,10 @@ def getArgsFromParser():
           default=argHelp[label][3],
           choices=argHelp[label][4],
           help=textwrap.dedent(argHelp[label][1]))
-
-  args = parser.parse_args()
+  try:
+      args = parser.parse_args()
+  except:
+      print('--- End of Usage Description --- ')
   return args,argHelp
 
 

@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+from sys import exit
 if sys.version_info[0] == 3:
     # for Python3
     from tkinter import *   ## notice lowercase 't' in tkinter here
@@ -59,13 +60,11 @@ def checkExec_env():
     while True:
         b = len(a)
         c = a[(b - 1)]
-        if c == m:
-            break
+        if c == m: break
         a = a[:(b - 1)]
-    if sys.executable == a + 'python.exe':
-        cmdL=True
+    if sys.executable == a + 'python.exe': cmdL=True
     else:
-        print (sys.executable)
+        #print (sys.executable)
         cmdL=False
     return (cmdL)
 
@@ -329,24 +328,21 @@ def identBudFile(path,namfile):
     print(" No supported flow Packages (BCF,BCF6,LPF or UPW) found in NAM file")
     exit(86)    
   cbcPkgFullName = os.path.join(path,cbcPkgFilename) 
-  print(cbcPkgFullName)
+  #print(cbcPkgFullName)
 
   cbcUnit = getUnitNum(cbcPkgFullName,1,1)
   if int(cbcUnit) == 0:
     cbcUnit = getUnitNum(cbcPkgFullName,1,2)
   cbcFilename = getFileByNum(os.path.join(path,namfile), cbcUnit)
   binfilename = os.path.join(path,cbcFilename) 
-  print ("CellxCell Flow filename {} on unit {}"\
-         .format(binfilename,cbcUnit))
+  #print ("CellxCell Flow filename {} on unit {}".format(binfilename,cbcUnit))
   return(binfilename)
 
 def readBinHead(binfilename,binType,optArgs):
-#
+    
 #   Read Modflow 2D Binary file such as the HEADS and CONC
 #       Each non-Header Record is a layer
 #           read as a 2D NumPy array (nrows,ncols)
-#
-
   if optArgs['gui']:
       makeTerminateBtn()
       
@@ -357,16 +353,13 @@ def readBinHead(binfilename,binType,optArgs):
   strPerRange = optArgs['strStr']
   dataRead=[]
   nlays,nrows,ncols,npers,cellsz1,cellsz2=modelDisc()
-  cmdLine=checkExec_env()
   ws1 = optArgs['geodb']
   
   Hdr=binHdr(binType)
   knt= int(nrows)*int(ncols)
   shape = (nrows,ncols)
-  if layerRange:
-    layerList = parseRange(layerRange)
-  else:
-    layerList = parseRange('1-'+str(nlays))
+  if layerRange: layerList = parseRange(layerRange)
+  else: layerList = parseRange('1-'+str(nlays))
   if strPerRange:
       strPerList = parseRange(strPerRange)
       maxStrPer =  max(strPerList)
@@ -403,7 +396,8 @@ def readBinHead(binfilename,binType,optArgs):
     k      = MFhdr['K'][0]
     
     heads = MFhdr["TEXT"][0].strip().replace(b" ",b"_").decode("utf-8")
-    print ('Stress Period=',kper,"Tot Time",totim,'lay=',k,heads)
+    if not optArgs['quiet']:
+        print ('Stress Period=',kper,"Tot Time",totim,'lay=',k,heads)
 
     dataRead = np.fromfile(file=binfile, dtype=np.float32,
                 count=knt, sep='').reshape(shape)
@@ -418,6 +412,7 @@ def readBinHead(binfilename,binType,optArgs):
     if layerList != [0] or strPerList != [0]:
       if k in layerList:
         if not strPerList or kper in strPerList:
+          if optArgs['quiet']: print('')
           MFgis.numPy2Ras(dataRead, rastername,optArgs,discDict)
           MFgis.clipRaster(rastername, optArgs)
         elif kper > maxStrPer:
@@ -560,16 +555,14 @@ def readBinCBC(binfilename,rasType,optArgs):
                             "VALUE","Magnitude",csizeMultiplier)
 
       if csizeMultiplier > 1:
+        print("{} \t:Resampled Raster".format(noPath(rasDirXFile)))
+        print("{} \t:Resampled Raster".format(noPath(rasMagXFile)))       
         if  optArgs['noArc']:
-          print("{} \t:GDAL Resampled Raster".format(noPath(rasDirXFile)))
-          print("{} \t:GDAL Resampled Raster".format(noPath(rasMagXFile)))          
           gdal.Warp(rasDirXFile+'.tif', rasDirFile+'.tif',
                     outputType=gdal.GDT_Int16,xRes=cellsize, yRes=cellsize)            
           gdal.Warp(rasMagXFile+'.tif', rasMagFile+'.tif',
                     outputType=gdal.GDT_Float32,xRes=cellsize, yRes=cellsize)
         else:
-          print("{} \t:ArcGIS Resampled Raster".format(noPath(rasDirXFile)))
-          print("{} \t:ArcGIS Resampled Raster".format(noPath(rasMagXFile)))
           arcpy.Resample_management(rasDir, rasDirX, cellsize, "BILINEAR")
           arcpy.Resample_management(rasMag, rasMagX, cellsize, "BILINEAR")
           
@@ -588,6 +581,8 @@ def readBinCBC(binfilename,rasType,optArgs):
   if optArgs['terms']:
     termset = optArgs['terms']
     if termset == 'RIGHT|FRONT': termset = ['FLOW_RIGHT_FACE', 'FLOW_FRONT_FACE' ]
+    if termset == 'FACE': termset = ['FLOW_RIGHT_FACE', 'FLOW_FRONT_FACE', 'FLOW_LOWER_FACE' ]
+    if termset == 'WELL': termset = ['WELLS' ]
   layerRange = optArgs['layerStr']
   strPerRange = optArgs['strStr']
   nlays,nrows,ncols,npers,cellsz1,cellsz1= modelDisc()
@@ -596,7 +591,7 @@ def readBinCBC(binfilename,rasType,optArgs):
   recLen= nrows*ncols
   shp3d = (nlays,nrows,ncols)
   reclen3d= nlays*nrows*ncols
-  print("ThreeD shape and size is (l.r.c) {0}*{1}*{2}={3}".format(nlays,nrows,ncols,reclen3d))
+  #print("ThreeD shape and size is (l.r.c) {0}*{1}*{2}={3}".format(nlays,nrows,ncols,reclen3d))
     
   csizeMultiplier = int(optArgs['resample'])
   CsizeVal = csizeMultiplier * cellsz1
@@ -606,16 +601,12 @@ def readBinCBC(binfilename,rasType,optArgs):
   cbcUFHdr=binHdr('CBCUF')
   xcbcHdr=binHdr('XCBC')
 
-  if layerRange:
-    layerList = parseRange(layerRange)
-  else:
-    layerList = parseRange('1-'+str(nlays))
+  if layerRange: layerList = parseRange(layerRange)
+  else: layerList = parseRange('1-'+str(nlays))
     
   strPerList = parseRange(strPerRange)
-  if strPerList:
-    maxStrPer =  max(strPerList)
-  else:
-    maxStrPer = 0
+  if strPerList: maxStrPer =  max(strPerList)
+  else: maxStrPer = 0
 
   print ("Binary Filename: {}".format(binfilename))
   binfile=open(binfilename,'rb')
@@ -630,7 +621,10 @@ def readBinCBC(binfilename,rasType,optArgs):
     if optArgs['gui']: 
       if i%5 == 0:
        root.update()
-       print ("checking Button Status...Condition = {}".format(running))    
+       if not optArgs['quiet']:
+           print ("checking Button Status...Condition = {}".format(running))  
+       else:
+           print(".",end='')
        if not running:
          root.destroy()
          exit(7)
@@ -646,7 +640,8 @@ def readBinCBC(binfilename,rasType,optArgs):
     kstp = int(MFhdr1["KSTP"][0])
     iper = int(MFhdr1["KPER"][0])
     budget = MFhdr1["TEXT"][0].strip().replace(b" ",b"_").decode("utf-8")
-    print("{} {} {}".format(kstp,iper,budget))
+    if not optArgs['quiet']:
+        print("{} {} {}".format(kstp,iper,budget))
 
     cbclays = int(MFhdr1["K"][0])
     if layerList:
@@ -656,9 +651,13 @@ def readBinCBC(binfilename,rasType,optArgs):
         dataRead = np.fromfile(binfile,np.int32,recLen).reshape(shape)
         ilayer = dataRead[1,1]
         dataRead = np.fromfile(binfile,np.float32,recLen).reshape(shape)
-        rastername = budget+"_"+str(ilayer)+"_"+str(tottim).replace("0.","")
+        #rastername = budget+"_"+str(ilayer)+"_"+str(tottim).replace("0.","")
+        rastername = budget + "_" + str(ilayer+1) + "_" + \
+                 '{:7.5f}'.format(((iper)/100000.0)) +  "_" + str(kstp)
+        rastername = rastername.replace("_0.","_")
         if not strPerList or iper in strPerList:
           if ilayer in layerList:
+            if optArgs['quiet']: print('')
             if rasType =='VEC' and budget in termset:
               doFlowVec()
             elif not optArgs['terms'] or optArgs['terms'] == 'ALL' or budget in termset:
@@ -666,19 +665,15 @@ def readBinCBC(binfilename,rasType,optArgs):
               MFgis.numPy2Ras(dataRead, rastername, optArgs,discDict)
               MFgis.clipRaster(rastername, optArgs)
           elif maxStrPer > 0 and iper > maxStrPer:
-            endOfTime = True
             if optArgs['gui']: root.destroy()
             return
-        if endOfTime:
-          if optArgs['gui']: root.destroy()
-          return
       else:
         dataRead=np.fromfile(binfile,np.float32,reclen3d).reshape(shp3d)
         for ilayer in range(nlays):
           #Check root to see if process should be terminated
           if optArgs['gui']:
               root.update()
-              if  not running:
+              if not running:
                 root.destroy()
                 exit(7)
           slice = dataRead[ilayer,:,:].reshape(shape)
@@ -687,17 +682,16 @@ def readBinCBC(binfilename,rasType,optArgs):
           rastername = rastername.replace("_0.","_")
           if not strPerList or iper in strPerList:
             if ilayer+1 in layerList:
-              if rasType =='VEC' and budget in termset: doFlowVec()
+              if rasType =='VEC' and budget in termset: 
+                  if optArgs['quiet']: print('')
+                  doFlowVec()
               elif not optArgs['terms'] or optArgs['terms'] == 'ALL' or budget in termset:
+                if optArgs['quiet']: print('')
                 MFgis.numPy2Ras(slice, rastername, optArgs,discDict)
                 MFgis.clipRaster(rastername, optArgs)
           elif maxStrPer > 0 and iper > maxStrPer:
-            endOfTime = True
             if optArgs['gui']: root.destroy()
             return
-        if endOfTime:
-          if optArgs['gui']: root.destroy()
-          return
   binfile.close()
   if optArgs['gui']: root.destroy()
   return
