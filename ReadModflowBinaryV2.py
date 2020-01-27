@@ -12,6 +12,7 @@
 """
 import sys
 import time
+import glob
 import easygui as ez
 import MFargDefaults.setDefaultArgs as defs
 import MFgui.MFgui as MFgui
@@ -111,6 +112,7 @@ def main():
       if reply: optArgs['namefile'] = reply
       print ("{} has been selected as the Namefile for {} model."\
              .format(optArgs['namefile'],optArgs['model']))
+      
     if optArgs['namefile']:
         (path, namfile) = os.path.split(optArgs['namefile'])
         if path == '':
@@ -132,33 +134,6 @@ def main():
 #--------------------------------------------------------------------------
     if optArgs['gui']:   MFgui.guiArgs(optArgs,argHelp)
     
-#--------------------------------------------------------------------------
-# Compile arguments into a single runstring useful for batch file execution:
-#--------------------------------------------------------------------------
-    runString = r'C:\Python27\ArcGIS10.3\python.exe' + \
-            r'\\ad.sfwmd.gov\dfsroot\data\wsd\SUP\devel\source\Python' + \
-                r'\ReadModflowBinary\ReadModflowBinaryV2.py'
-    start_time=time.clock()
-            
-#--------------------------------------------------------------------------                
-# check each optArg item to see if has been assigned
-#   Each assigned option [key] are paired with str[val]
-#       or string converted from a tuple or list and delimited by '|'
-#--------------------------------------------------------------------------
-    for arg,val in optArgs.items():
-      if val:
-        for key, value in argHelp.items():
-          if value[2] == arg:
-            if value[2] == 'gui':  pass
-            elif len(value) < 4 :  runString += ' -'+key                    
-            elif value[3] != val:  runString += ' -'+key + ' ' + str(val)
-            elif value[2] == 'terms': 
-              runString += ' -terms '
-              if type(val) is list or type(val) is tuple:
-                  for trm in val: Sval = '|'.join(map(str,val))
-                  runString += '"'+Sval+'"'
-              else: runString += '"'+val.strip('\'')+'"'
-                      
 #--------------------------------------------------------------------------                       
 # Reset previously user assigned noArc to True if not able to import arcpy  
 # mostlikely because it is not being ran from Citrix)       
@@ -168,11 +143,59 @@ def main():
             import arcpy
         except ImportError:
             print ('ESRI ArcGIS arcpy library is not availble')
-            optArgs['noArc'] = True
+            optArgs['noArc'] = True    
+            
+#--------------------------------------------------------------------------
+# Compile arguments into a single runstring useful for batch file execution:
+#--------------------------------------------------------------------------
+    runString = sys.executable.replace('pythonw.exe','python.exe') + " " + \
+            r'\\ad.sfwmd.gov\dfsroot\data\wsd\SUP\devel\source\Python' + \
+                r'\ReadModflowBinary\ReadModflowBinaryV2.py'
+    runSpyderString = "runfile(r'\\\\ad.sfwmd.gov\\dfsroot\\data\\wsd\\SUP\\devel\\source\\Python" + \
+                "\\ReadModflowBinary\\ReadModflowBinaryV2.py',  " + \
+                "wdir=r'\\\\ad.sfwmd.gov\\dfsroot\\data\\wsd\\SUP\\devel\\source\\Python\\ReadModflowBinary '," +\
+                "args='"          
+    start_time=time.clock()
+            
+#--------------------------------------------------------------------------                
+# check each optArg item to see if it has been assigned
+#   Each assigned option [key] are paired with str[val]
+#       or string converted from a tuple or list and delimited by '|'
+#--------------------------------------------------------------------------
+    for arg,val in optArgs.items():
+      if val:
+        for key, value in argHelp.items():
+          if value[2] == arg:
+            if value[2] == 'gui':  
+                runSpyderString += ' -'+value[2]
+            elif len(value) < 4 :  
+                runString += ' -'+key                    
+                runSpyderString += ' -'+key      
+            elif value[2] == 'terms': 
+              runString += ' -terms '
+              runSpyderString += ' -terms '
+              if type(val) is list or type(val) is tuple:
+                  # Add | to separate each terms
+                  for trm in val: Sval = '|'.join(map(str,val))      
+                  runString += '"'+Sval+'"'
+                  runSpyderString += '"'+Sval+'"'
+              else: 
+                  # remove single quotes from terms
+                  runString += '"'+val.strip('\'')+'"'               
+                  runSpyderString += '"'+val.strip('\'')+'"'
+            elif value[3] != val:  
+                # DOS likes backslashes
+                runString += ' -'+key + ' ' + str(val.replace('/','\\'))  
+                # Spyder likes forwardslashes
+                runSpyderString += ' -'+key + ' ' + str(val.replace('\\','/')) 
+    runSpyderString += "')"                  
             
     print ("""Command line execution string:
     {} 
     """.format(runString))
+    print ("""Spyder console Execution string arguments:
+    {}
+    """.format(runSpyderString))
         
 #--------------------------------------------------------------------------                       
 #   Define workspace areas, depending upon availability of arcpy functions
@@ -206,7 +229,6 @@ def main():
     if optArgs['heads']:
       ocFilename = mf.FileByInitials(os.path.join(path, namfile), 'OC')
       ocFilename_full = os.path.join(path, ocFilename)
-      print ("Output Control filename: {}".format(ocFilename))
 
       if (optArgs['model'] in ['C4CDC','NPALM','ECFTX']):
         HeadsUnit = mf.getUnitNum(ocFilename_full,1,3)
@@ -251,7 +273,7 @@ def main():
 #   Process binary UZF CellxCell Budgets
 #-------------------------------------------------------------------------- 
     if optArgs['uzfcbc']:
-      uzfFilename = FileByInitials(os.path.join(path,namfile), 'UZF')
+      uzfFilename = mf.FileByInitials(os.path.join(path,namfile), 'UZF')
       uzfFilename_full = os.path.join(path,uzfFilename)
       uzfUnit = getUnitNum(uzfFilename_full,1,6)
       
@@ -278,9 +300,44 @@ def main():
         print ("""Overriding terms option for flow vectors: 
            required terms are -- 'RIGHT|FRONT' 
            indicates FLOW_RIGHT_FACE and FLOW_FRONT_FACE """)
-            
       mf.readBinCBC(cbcfilename,'VEC',optArgs)
       
+#--------------------------------------------------------------------------                       
+#   Aggregate rasters from current workspace with  MEAN, MAX, or MIN 
+#--------------------------------------------------------------------------       
+    if optArgs['aggregate']:
+        for process in ['heads','conc','terms']:
+            rasTypes =[]
+            if optArgs['heads'] and process == 'heads': 
+                rasTypes = ['HEAD']
+            elif optArgs['conc'] and process == 'conc':  
+                rasTypes = ['CONC']
+            elif type(optArgs['terms']) == list and process == 'terms': 
+                rasTypes= optArgs['terms']
+            elif len(optArgs['terms']) > 0 and process == 'terms': 
+                rasTypes= optArgs['terms'].split("|")
+            print('\nCreating '+str(optArgs['aggregate']).upper()+' rasters for '+ str(rasTypes))
+            for typ in rasTypes:
+                for lay in mf.parseRange(optArgs['layerStr']):
+                    # Search for budget raster with different wildCard pattern than Heads or Conc
+                    # Currently ignores clp rasters
+                    if optArgs['terms'] and process == 'terms':
+                        wildCardStr = '_'+str(lay)+'*.tif'
+                    else:
+                        wildCardStr = '*_'+str(lay)+'.tif'
+                    tifFiles = glob.glob(optArgs['rasFolder']+'\\'+typ+wildCardStr)
+                    L = [np.array(MFgis.rasFile2array(rasFile)) for rasFile in tifFiles]
+                    if optArgs['aggregate'] == 'mean':
+                        summaryRas=np.mean(L,axis=0)  
+                        rasName=optArgs['rasFolder']+'\\MEAN_'+typ+'_'+str(lay)
+                    elif optArgs['aggregate'] == 'min':
+                        summaryRas=np.min(L,axis=0)  
+                        rasName=optArgs['rasFolder']+'\\MIN_'+typ+'_'+str(lay)
+                    elif optArgs['aggregate'] == 'max':
+                        summaryRas=np.max(L,axis=0)  
+                        rasName=optArgs['rasFolder']+'\\MAX_'+typ+'_'+str(lay)
+                    MFgis.numPy2Ras(summaryRas, rasName, optArgs, discDict)
+
 #--------------------------------------------------------------------------                       
 #   Clean up memory and release Spatial Analyst if using arcpy on Citrix
 #-------------------------------------------------------------------------- 
@@ -292,19 +349,15 @@ def main():
 #   End of the program
 #-------------------------------------------------------------------------- 
     print ("...finished")
-    print(time.clock()-start_time, ' seconds execution time')
+    print(round(time.clock()-start_time,2), ' seconds execution time')
 
 #--------------------------------------------------------------------
 #  cmdLine variable is used to determine gui options
 #--------------------------------------------------------------------
 if __name__ == '__main__':
     cmdLine = checkExec_env()
-    if cmdLine:
-        print('Running in Command line')
-  #      pool = multiprocessing.Pool()        
-    else:
-        print('Running in Python IDLE')
-  #  platform = (None, 'mp')[cmdLine]
+    if cmdLine: print('Running in Command line')
+    else: print('Running in Python IDLE')
 
     global running
     running = True  # Global flag for Terminate Button
@@ -317,10 +370,15 @@ if __name__ == '__main__':
 #--------------------------------------------------------------------   
     discDict ={}
     argHelp ={}
-    parserArgs,argHelp = defs.getArgsFromParser()
-    optArgs = vars(parserArgs)
-    for k in optArgs.items():
-      label, value = k
-      print ("{!s:<15} {!s:>6}".format(label, value))
-    main()  
+    try:
+        parserArgs,argHelp = defs.getArgsFromParser()
+                
+        optArgs = vars(parserArgs)
+        if not optArgs['quiet']: 
+            for k in optArgs.items():
+                label, value = k
+                print ("{!s:<15} {!s:>6}".format(label, value))
+        main()  
+    except:
+        exit
     
