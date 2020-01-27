@@ -20,6 +20,10 @@ optional arguments:
 	-bud                Process CellxCell budgets
 	-clpbox CLIPBOX     Clip rasters to extent.
 	-clpgdb CLPGDB      Separate Geodatabase for Clipped Rasters
+                      ['min', 'max', 'mean'] 
+	-bud                Process CellxCell budgets
+	-clpbox CLIPBOX     Clip rasters to extent.
+	-clpgdb CLPGDB      Separate Geodatabase for Clipped Rasters
 	-gdb    GEODB       Save rasters in GeoDatabase.
 	-gui                GUI for options & arguments
 	-hds                Process Heads file.
