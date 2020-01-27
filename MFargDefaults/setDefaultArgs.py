@@ -8,7 +8,6 @@
 """
 def setDefaultArgs():
   model_choices =['C4CDC','ECFM','ECFT','ECFTX','LECSR','NPALM','LKBGWM','LWCFAS','LWCSAS','LWCSIM','WCFM']
-    
   function_choices=['min','max','mean']
 #
 #   Define dictionary of arguments to use in ArgumentParser

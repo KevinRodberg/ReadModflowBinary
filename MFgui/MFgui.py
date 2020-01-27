@@ -19,8 +19,6 @@ if sys.version_info[0] == 3:
 else:
     # for Python2
     from Tkinter import *   ## notice capitalized T in Tkinter
-    
-
 
 def guiBin(justOptions,optArgs,argHelp):
 #
@@ -52,8 +50,7 @@ def guiBin(justOptions,optArgs,argHelp):
       TrueOptions = [k for k, v in \
           sorted(argHelp.items()) if v[0] =='option' and
                optArgs[v[2]] and k not in ('uzf','gui')]
-    if not reply:
-      break
+    if not reply: break
   return(TrueOptions)
 
 def guiModel(optArgs,argHelp):
@@ -73,23 +70,19 @@ def guiModel(optArgs,argHelp):
         if v[2] == 'model':
           modelChoices =sorted(v[4])
       reply=ez.choicebox(msg=modelMsg,title=title,choices=modelChoices)
-    else:
-      break
-    if reply:
-        break
+    else:  break
+    if reply: break
   try:
     selected = reply
-    if reply:
-      optArgs['model'] = selected
+    if reply: optArgs['model'] = selected
   except:
     pass
-#  print ("{} Model selected".format(optArgs['model'])) 
   return (optArgs['model'])
 
 def guiArgVals(justArgs,optArgs,argHelp):
 #
 #   GUI value definitions of optional arguments such as:
-#       lay, strPer, res, terms
+#       agg, lay, strPer, res, terms
 #   arguments needing path or filenames excluded:
 #       ras, gdb, clpgdb, clpbox
 #
@@ -115,19 +108,16 @@ def guiArgVals(justArgs,optArgs,argHelp):
       argValsMsg= "{}".format(argHelp[selected[0]][1])
       while True:
         reply = ez.enterbox(msg = argValsMsg)
-        if reply:
-            break
+        if reply: break
       if ('-'+selected[0]) in reply:
           reply = reply.strip('-'+selected[0])
       optArgs[argHelp[selected[0]][2]]= reply
     except:
       pass
-    if not reply:
-      break
+    if not reply: break
     
   NoneVals = [k for k, v in \
-    sorted(argHelp.items()) if v[0] !='option' and
-        not optArgs[v[2]]
+    sorted(argHelp.items()) if v[0] !='option' and not optArgs[v[2]]
         and k not in('nam','ras','mod','gdb','clpgdb','clpBox')]    
   return(NoneVals)
 
@@ -143,11 +133,10 @@ def guiMFterms(MFbudTerms,optArgs):
   while True:
     reply = ez.multchoicebox(msg=intro_message,
                              title=title,choices = MFbudTerms)
-    if reply:
-      break
+    if reply: break
   return(reply)
 
-def guiGeoVals(spatialArgs,optArgs,argHelp):
+def guiGeoVals(geoArgs,optArgs,argHelp):
 #
 #   GUI argument value definitions of arguments needing path or filenames
 #   for Spatial stuff like geodatabase or points:
@@ -163,9 +152,8 @@ def guiGeoVals(spatialArgs,optArgs,argHelp):
   while True:
     #--- Really long assignment statement      
     presented_choices =["{!s:<10} {!s:<15} {!s:>20} "\
-                        .format(label,optArgs[value[2]],
-                                ' '.join(value[1].split()) )
-      for label, value in sorted(spatialArgs.items())]
+                        .format(l,optArgs[v[2]],' '.join(v[1].split()) )
+      for l, v in sorted(geoArgs.items())]
     #--- End of Really long assignment statement
     reply = ez.choicebox(msg=intro_message,title=title,
               choices=presented_choices)
@@ -193,15 +181,15 @@ def guiGeoVals(spatialArgs,optArgs,argHelp):
             break
       else:
         gdbName = ''
+        print('ras Directory select:')
+        print(os.path.join(dirName,gdbName))
       optArgs[argHelp[selected[0]][2]]= os.path.join(dirName,gdbName)
-      print(selected[0],argHelp[selected[0]][2],optArgs[argHelp[selected[0]][2]])
 
     except:
       print ("Multiple Argument definition complete")    
     if not reply:
       break
   DefaultVals = [k for k, v in \
-    #sorted(argHelp.iteritems()) if v[0] !='option' \
     sorted(argHelp.items()) if v[0] !='option' \
         and optArgs[v[2]] and ('Default' in optArgs[v[2]]
         or '0,0,0,0' in optArgs[v[2]])
@@ -213,28 +201,19 @@ def guiArgs(optArgs,argHelp):
 #   Begin processing using GUI interface
 #   when -gui option provided on Command Line
 #
-  justOptions ={k: v for k, v in \
-        #sorted(argHelp.iteritems()) if v[0] =='option'
-        sorted(argHelp.items()) if v[0] =='option'
-        and k not in ('uzf')}
-  print(justOptions)
-  justArgs ={k: v for k, v in argHelp.items()
-    if v[0] !='option'
-        and k not in('nam','mod','ras','gdb','clpgdb','clpBox')}
-  spatialArgs={k: v for k, v in argHelp.items()
-             if v[0] !='option'
-             and k in('ras','gdb','clpgdb','clpBox')}
-  
+  justOptions ={k: v for k, v in sorted(argHelp.items()) if v[0] =='option' and k not in ('uzf')}
+  justArgs    ={k: v for k, v in argHelp.items() if v[0] !='option' and k not in('nam','mod','ras','gdb','clpgdb','clpBox')}
+  geoArgs     ={k: v for k, v in argHelp.items() if v[0] !='option' and k in('ras','gdb','clpgdb','clpBox')}
   #   select Binary data options
   
   TrueOptions = guiBin(justOptions,optArgs,argHelp)
-  print ("TrueOptions")
-  print (TrueOptions)
   while not TrueOptions:
       TrueOptions =guiBin(justOptions,optArgs,argHelp)
   
   #  Choose from an existing model definition
   SelectedModel = guiModel(optArgs,argHelp)
+  SelectedFunction = guiModel(optArgs,argHelp)
+  print("Model has been selected as: {}".format(SelectedModel))
   
   #  Identify Arguments which are still = None
   NoneVals = guiArgVals(justArgs,optArgs,argHelp)
@@ -269,7 +248,7 @@ def guiArgs(optArgs,argHelp):
   #
   #  Identify Arguments which are still = Default or 0,0,0,0
   #          
-  DefaultVals = guiGeoVals(spatialArgs,optArgs,argHelp)
+  DefaultVals = guiGeoVals(geoArgs,optArgs,argHelp)
   for arg in DefaultVals:
       text= "Default values for "+arg+"""
               ...  [Cancel] to provide value
