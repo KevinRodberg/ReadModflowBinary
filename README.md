@@ -14,9 +14,12 @@ usage: ReadModflowBinary
 optional arguments:
 
 	-h, --help          Show this help message and exit
+	-agg {min,max,mean} Aggregate multiple rasters into a single raster
+                      usings one of the predefined functions
+                      ['min', 'max', 'mean'] 
 	-bud                Process CellxCell budgets
 	-clpbox CLIPBOX     Clip rasters to extent.
-  	-clpgdb CLPGDB      Separate Geodatabase for Clipped Rasters
+  -clpgdb CLPGDB      Separate Geodatabase for Clipped Rasters
 	-gdb    GEODB       Save rasters in GeoDatabase.
 	-gui                GUI for options & arguments
 	-hds                Process Heads file.
@@ -29,26 +32,28 @@ optional arguments:
 	-mod {ECFTX,NPALM,LECSR,LWCSIM,C4CDC,LWCSAS,LWCFAS,ECFM,LKBGWM,WCFM,ECFT}
                       Model defines Spatial Reference and Raster Lower Left Origin
 	-nam    NAMEFILE    Assign Modflow .NAM FILE
-	-res    RESAMPLE    Resampling aggregates values
-                        Heads are averaged, 
-                        Flows Magnitude is summed, 
-                        Flow Direction is averaged
-                      --------------------------
-                     -res 5 Aggregates 5x5 grid
-                     -res 1 Default or no resampling:[1x1]
-	-strPer STRSTR   Define Stress Periods to process:
-                  -- One stress period: 
+  -noArcGIS           Process binary files without using ArcGIS	
+  -quiet              Reduce output to console	
+  -ras 		RASFOLDER   Save rasters in folder.	
+  -res 		RESAMPLE    Resampling only aggregates horizontal flow vector results
+                          -Flow Magnitudes are summed
+                          -Flow Direction is averaged
+                          --------------------------
+                          -res 5 Aggregates 5x5 grid
+                          -res 1 Default or no resampling:[1x1]
+	-strPer STRSTR  		Define Stress Periods to process:
+											-- One stress period: 
                             '-strPer 218'
-                  -- Multiple stress periods: 
+											-- Multiple stress periods: 
                             '-strPer 1-12,218,288'
-                  -- Omit [-strPer] for all periods
-                  -- Use '-strPer 0' for none 
- 	-swi             Process SWI Zetas file.
-	-tds             Process TDS from MT3D file.
-	-terms TERMS     Process 'TERMS' for CellxCell budget.
-                  -- 'FLOW' indicates Right, Front and Lower face flow
-                  -- 'RIGHT|FRONT' indicates FLOW_RIGHT_FACE and FLOW_FRONT_FACE
-                  --  No parameters uses all budget terms
+											-- Omit [-strPer] for all periods
+											-- Use '-strPer 0' for none 
+ 	-swi             		Process SWI Zetas file.
+	-tds             		Process TDS from MT3D file.
+	-terms TERMS     		Process 'TERMS' for CellxCell budget.
+											-- 'FLOW' indicates Right, Front and Lower face flow
+											-- 'RIGHT|FRONT' indicates FLOW_RIGHT_FACE and FLOW_FRONT_FACE
+											--  No parameters uses all budget terms
 	-uzf             Process UZF cellbycell budgets.
 	-vec             Process Flow budgets for flow vectors 
                   Automatically assigns:
