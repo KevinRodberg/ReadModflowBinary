@@ -1,0 +1,292 @@
+"""
+@author: Kevin A. Rodberg, Science Supervisor
+
+  Protoype code demonstrating colorizing geoTiffs as png files
+  to be incormorated in Read Modflow Binary (RMBF) scripts.
+  
+"""
+
+from osgeo import gdal
+from osgeo.gdalconst import GA_ReadOnly
+from struct import unpack
+import subprocess
+import re
+import os
+import math
+import numpy as np
+from scipy.stats import binned_statistic
+import pandas as pd
+
+#---
+#  Main program segment, provides example how the colledtion of prototype
+#  functions may be called in RMFB  
+#---
+def main():
+
+    #- Call function to initialize colorRamps
+    global colorRamps
+    colorRamps=colrRampDef()
+   # color = 'YlGnBu'
+    color = 'YlOrRd'
+    
+    #  Assign input and output file names of rasters and colorRamp file
+    path= 'H:/Documents/ArcGIS/'
+    os.chdir(path)
+    colorFile = 'colorfilr.clr'
+    
+  #  raster_file =path +'HEAD_00100_1.tif'
+    raster_file =path +'CONC_00001_1.tif'
+   # "H:\Documents\ArcGIS\CONC_00001_1.tif"
+    png_file = re.sub('.tif','.png',raster_file)
+    
+    createColorfile(raster_file,colorFile,color)
+       
+    #  Colorize GeoTiff as png file
+    gdalcmd =  "gdaldem color-relief " +raster_file+ " " +colorFile+ " " +png_file
+    subprocess.call(gdalcmd)
+    
+#define function to calculate equal-frequency bins 
+def equalObs(x, nbin):
+    nlen = len(x)
+    return np.interp(np.linspace(0, nlen, nbin + 1),
+                     np.arange(nlen),
+                     np.sort(x))    
+#---
+#- Calculate appropriate precision of first column of colorFile
+#  colorFile is used to define color ramps for the raster data
+#---
+def setColrRampPrec(band):
+    data_types ={'Byte':'B','UInt16':'H','Int16':'h','UInt32':'I','Int32':'i',
+                 'Float32':'f','Float64':'d'}
+    
+    Allvalues = band.ReadRaster( 0, 0, band.XSize, band.YSize, band.XSize, 
+                                band.YSize, band.DataType )
+    Allvalues = unpack(data_types[gdal.GetDataTypeName(band.DataType)]*band.XSize*band.YSize,
+                       Allvalues)
+
+    mostMax = max(Allvalues)  # ie: 999
+    leastMin = min(Allvalues) # ie: -999
+    values=list(filter(lambda v:(v<mostMax), 
+                       list(filter(lambda val:(val>leastMin), 
+                                   Allvalues))))
+    minVal=min(values)
+    maxVal=max(values)
+    #bin_edges=equalObs(values, 9)
+    bin_edges=np.geomspace(.001,36,num=9,endpoint=True,dtype=None)
+    precChk1 = abs(0-minVal)
+    precChk2 = abs(0-maxVal)
+    precChk3 = maxVal-minVal
+    
+    # set minimum precision for whole numbers
+    prec1 = prec2 = prec3 = 2
+
+    #sets precision for very small numbers
+    if (precChk1<1): prec1 = int(-math.log10(precChk1))+2
+    if (precChk2<1): prec2 = int(-math.log10(precChk2))+2
+    if (precChk3<1): prec3 = int(-math.log10(precChk3)+2)
+    
+    # if values are very large precison should be set to 0  
+    precision=max([prec1,prec2,prec3])
+    if (precision < 0):  precision = 0   
+    return (precision,minVal, maxVal,bin_edges)
+
+#---
+#  writes colorFile to be read via gdaldem subprocess function call
+#---
+def createColorfile(raster_file,colorFile,color):    
+
+    dataset = gdal.Open(raster_file, GA_ReadOnly )
+    band = dataset.GetRasterBand(1)
+    
+    #  set precision and determine range of values in raster    
+    (precision,minVal, maxVal,bin_edges) = setColrRampPrec(band)
+    
+    fmtStr = "{0:12."+str(precision)+"f}{1:5.0f}{2:5.0f}{3:5.0f}\n"
+    
+    #  Create ColorRamp file for subprocess function
+    with open(colorFile, 'w') as f:
+      df1=colorRamps[colorRamps['ramp']==color].iloc(1)[2:]
+      nColors = len(df1.index)
+      interval= (maxVal-minVal)/nColors
+      intervals = np.arange(minVal, maxVal, interval)
+      for indx in range(0,nColors):
+        # f.write(fmtStr.format(intervals[indx],
+        #                       df1.iloc(0)[indx]['R'],
+        #                       df1.iloc(0)[indx]['G'],
+        #                       df1.iloc(0)[indx]['B']))
+        f.write(fmtStr.format(bin_edges[indx],
+                              df1.iloc(0)[indx]['R'],
+                              df1.iloc(0)[indx]['G'],
+                              df1.iloc(0)[indx]['B']))        
+
+#---
+#  Function returns code which may be ran in R to generate RGB values for color ramps
+#---
+def RscriptForRamps():
+  code= """
+           library(RColorBrewer)
+           vHex2RGB<-Vectorize(col2rgb)
+           dfList = list();x = 0
+           for (ramp in row.names(brewer.pal.info)){
+             x = x + 1
+             n=brewer.pal.info[ramp,1] # max colors
+             df <-cbind(seq(1,n),as.data.frame(t(vHex2RGB(brewer.pal(n,ramp)))))
+             names(df)<- c('seq','R','G','B')
+             dfList[[x]]=cbind(ramp,df)
+           }
+           colorRampRGB <- do.call(rbind,dfList)
+           write.table(colorRampRGB,file ='',row.names = FALSE)
+        """    
+  return code
+
+#---
+#  lists of each attribute generated by R script are bound column-wise into data frame
+#  representing the sequence of RGB triplets for each color in the associated ramp
+#---
+def colrRampDef():
+    
+    # dataframe structure ended up requiring color ramp 
+    # theme names (or ramps) to be replicated for each triplet in the sequnce 
+    # >>>  Possibly cleaner to set up as a dict{}
+    
+    #  -- currently there are 35 redefined themes:
+    ramps = ['BrBG']*11+['PiYG']*11+["PRGn"]*11+["PuOr"]*11+["RdBu"]*11 +["RdGy"]*11+ \
+        ["RdYlBu"]*11+["RdYlGn"]*11+["Spectral"]*11+["Accent"]*8+["Dark2"]*8+["Paired"]*12+ \
+            ["Pastel1"]*9+["Pastel2"]*8 +["Set1"]*9+["Set2"]*8 +["Set3"]*12+["Blues"]*9+ \
+                ["BuGn"]*9+["BuPu"]*9+["GnBu"]*9+["Greens"]*9+["Greys"]*9+["Oranges"]*9+ \
+                    ["OrRd"]*9+["PuBu"]*9+["PuBuGn"]*9+["PuRd"]*9+["Purples"]*9+["RdPu"]*9+ \
+                        ["Reds"]*9+["YlGn"]*9+["YlGnBu"]*9+["YlOrBr"]*9+["YlOrRd"]*9
+          
+    rampSeq = list(range(1,12))+list(range(1,12))+list(range(1,12))+list(range(1,12))+ \
+        list(range(1,12))+list(range(1,12))+list(range(1,12))+list(range(1,12))+ \
+            list(range(1,12))+list(range(1,9))+list(range(1,9))+list(range(1,13)) + \
+                list(range(1,10))+list(range(1,9))+list(range(1,10))+list(range(1,9)) + \
+                    list(range(1,13))+list(range(1,10))+list(range(1,10))+list(range(1,10))+ \
+                        list(range(1,10))+list(range(1,10))+list(range(1,10))+ \
+                            list(range(1,10))+list(range(1,10))+list(range(1,10))+ \
+                                list(range(1,10))+list(range(1,10))+list(range(1,10))+ \
+                                    list(range(1,10))+list(range(1,10))+list(range(1,10))+ \
+                                        list(range(1,10))+list(range(1,10))+list(range(1,10))
+     
+    Rs = \
+        [ 84, 140, 191, 223, 246, 245, 199, 128,  53,   1,   0, 
+         142, 197, 222, 241, 253, 247, 230, 184, 127,  77,  39,
+          64, 118, 153, 194, 231, 247, 217, 166,  90,  27,   0, 
+         127, 179, 224, 253, 254, 247, 216, 178, 128,  84,  45, 
+         103, 178, 214, 244, 253, 247, 209, 146,  67,  33,   5, 
+         103, 178, 214, 244, 253, 255, 224, 186, 135,  77,  26, 
+         165, 215, 244, 253, 254, 255, 224, 171, 116,  69,  49, 
+         165, 215, 244, 253, 254, 255, 217, 166, 102,  26,   0, 
+         158, 213, 244, 253, 254, 255, 230, 171, 102,  50,  94, 
+         127, 190, 253, 255,  56, 240, 191, 102,  
+          27, 217, 117, 231, 102, 230, 166, 102, 
+         166,  31, 178,  51, 251, 227, 253, 255, 202, 106, 255, 177,  
+         251, 179, 204, 222, 254, 255, 229, 253, 242, 
+         179, 253, 203, 244, 230, 255, 241, 204, 
+         228,  55,  77, 152, 255, 255, 166, 247, 153, 
+         102, 252, 141, 231, 166, 255, 229, 179, 
+         141, 255, 190, 251, 128, 253, 179, 252, 217, 188, 204, 255,
+         247, 222, 198, 158, 107,  66,  33,   8,   8,  
+         247, 229, 204, 153, 102,  65,  35,   0,   0, 
+         247, 224, 191, 158, 140, 140, 136, 129,  77, 
+         247, 224, 204, 168, 123,  78,  43,   8,   8, 
+         247, 229, 199, 161, 116,  65,  35,   0,   0, 
+         255, 240, 217, 189, 150, 115,  82,  37,   0, 
+         255, 254, 253, 253, 253, 241, 217, 166, 127, 
+         255, 254, 253, 253, 252, 239, 215, 179, 127, 
+         255, 236, 208, 166, 116,  54,   5,   4,   2, 
+         255, 236, 208, 166, 103,  54,   2,   1,   1, 
+         247, 231, 212, 201, 223, 231, 206, 152, 103, 
+         252, 239, 218, 188, 158, 128, 106,  84,  63, 
+         255, 253, 252, 250, 247, 221, 174, 122,  73, 
+         255, 254, 252, 252, 251, 239, 203, 165, 103, 
+         255, 247, 217, 173, 120,  65,  35,   0,   0, 
+         255, 237, 199, 127,  65,  29,  34,  37,   8, 
+         255, 255, 254, 254, 254, 236, 204, 153, 102, 
+         255, 255, 254, 254, 253, 252, 227, 189, 128]
+
+    Gs = \
+        [48,  81, 129, 194, 232, 245, 234, 205, 151, 102,  60,
+          1,  27, 119, 182, 224, 247, 245, 225, 188, 146, 100,
+          0,  42, 112, 165, 212, 247, 240, 219, 174, 120,  68,
+         59,  88, 130, 184, 224, 247, 218, 171, 115,  39,   0,
+          0,  24,  96, 165, 219, 247, 229, 197, 147, 102,  48,
+          0,  24,  96, 165, 219, 255, 224, 186, 135,  77,  26,
+          0,  48, 109, 174, 224, 255, 243, 217, 173, 117,  54,
+          0,  48, 109, 174, 224, 255, 239, 217, 189, 152, 104,
+          1,  62, 109, 174, 224, 255, 245, 221, 194, 136,  79,
+        201, 174, 192, 255, 108,   2,  91, 102,
+        158,  95, 112,  41, 166, 171, 118, 102,
+        206, 120, 223, 160, 154,  26, 191, 127, 178,  61, 255,  89,
+        180, 205, 235, 203, 217, 255, 216, 218, 242,
+        226, 205, 213, 202, 245, 242, 226, 204,
+         26, 126, 175,  78, 127, 255,  86, 129, 153,
+        194, 141, 160, 138, 216, 217, 196, 179,
+        211, 255, 186, 128, 177, 180, 222, 205, 217, 128, 235, 237,
+        251, 235, 219, 202, 174, 146, 113,  81,  48,
+        252, 245, 236, 216, 194, 174, 139, 109,  68,
+        252, 236, 211, 188, 150, 107,  65,  15,   0, 
+        252, 243, 235, 221, 204, 179, 140, 104,  64,
+        252, 245, 233, 217, 196, 171, 139, 109,  68,
+        255, 240, 217, 189, 150, 115,  82,  37,   0,
+        245, 230, 208, 174, 141, 105,  72,  54,  39,
+        247, 232, 212, 187, 141, 101,  48,   0,   0,
+        247, 231, 209, 189, 169, 144, 112,  90,  56,
+        247, 226, 209, 189, 169, 144, 129, 108,  70,
+        244, 225, 185, 148, 101,  41,  18,   0,   0,
+        251, 237, 218, 189, 154, 125,  81,  39,   0,
+        247, 224, 197, 159, 104,  52,   1,   1,   0,
+        245, 224, 187, 146, 106,  59,  24,  15,   0,
+        255, 252, 240, 221, 198, 171, 132, 104,  69,
+        255, 248, 233, 205, 182, 145,  94,  52,  29,
+        255, 247, 227, 196, 153, 112,  76,  52,  37, 
+        255, 237, 217, 178, 141,  78,  26,   0,   0]
+
+    Bs = \
+        [  5,  10,  45, 125, 195, 245, 229, 193, 143,  94,  48,
+          82, 125, 174, 218, 239, 247, 208, 134,  65,  33,  25,
+          75, 131, 171, 207, 232, 247, 211, 160,  97,  55,  27,
+           8,   6,  20,  99, 182, 247, 235, 210, 172, 136,  75,
+          31,  43,  77, 130, 199, 247, 240, 222, 195, 172,  97,
+          31,  43,  77, 130, 199, 255, 224, 186, 135,  77,  26,
+          38,  39,  67,  97, 144, 191, 248, 233, 209, 180, 149, 
+          38,  39,  67,  97, 139, 191, 139, 106,  99,  80,  55,
+          66,  79,  67,  97, 139, 191, 152, 164, 165, 189, 162,
+         127, 212, 134, 153, 176, 127,  23, 102,
+         119,   2, 179, 138,  30,   2,  29, 102,
+         227, 180, 138,  44, 153,  28, 111,   0, 214, 154, 153,  40,
+         174, 227, 197, 228, 166, 204, 189, 236, 242,
+         205, 172, 232, 228, 201, 174, 204, 204,
+          28, 184,  74, 163,   0,  51,  40, 191, 153,
+         165,  98, 203, 195,  84,  47, 148, 179,
+         199, 179, 218, 114, 211,  98, 105, 229, 217, 189, 197, 111,
+         255, 247, 239, 225, 214, 198, 181, 156, 107,
+         253, 249, 230, 201, 164, 118,  69,  44,  27,
+         253, 244, 230, 218, 198, 177, 157, 124,  75,
+         240, 219, 197, 181, 196, 211, 190, 172, 129,
+         245, 224, 192, 155, 118,  93,  69,  44,  27,
+         255, 240, 217, 189, 150, 115,  82,  37,   0, 
+         235, 206, 162, 107,  60,  19,   1,   3,   4, 
+         236, 200, 158, 132,  89,  72,  31,   0,   0, 
+         251, 242, 230, 219, 207, 192, 176, 141,  88,
+         251, 240, 230, 219, 207, 192, 138,  89,  54, 
+         249, 239, 218, 199, 176, 138,  86,  67,  31, 
+         253, 245, 235, 220, 200, 186, 163, 143, 125, 
+         243, 221, 192, 181, 161, 151, 126, 119, 106, 
+         240, 210, 161, 114,  74,  44,  29,  21,  13, 
+         229, 185, 163, 142, 121,  93,  67,  55,  41, 
+         217, 177, 180, 187, 196, 192, 168, 148,  88, 
+         229, 188, 145,  79,  41,  20,   2,   4,   6, 
+         204, 160, 118,  76,  60,  42,  28,  38,  38]    
+        
+    dfColNames = ('ramp', 'rampSeq', 'R', 'G','B')
+    
+    rowList = []
+    for t in zip(ramps,rampSeq,Rs,Gs,Bs):
+        rowList.append(t)
+        
+    colorRamps = pd.DataFrame(rowList,columns=dfColNames)
+    return colorRamps
+
+if __name__ == '__main__':
+        main()
